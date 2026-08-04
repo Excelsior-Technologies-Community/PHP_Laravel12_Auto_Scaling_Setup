@@ -32,16 +32,41 @@ class ScalingController extends Controller
         $statistics = $this->scalingService->getStatistics();
 
         return view('dashboard', [
+
             'metrics' => $metrics,
+
             'history' => $history,
+
             'statistics' => $statistics,
 
             'scaleUpThreshold' => 70,
+
             'scaleDownThreshold' => 30,
 
             'search' => $request->search,
+
             'action' => $request->action,
+
             'date' => $request->date,
+
+            /*
+        |--------------------------------------------------------------------------
+        | New Dashboard Data
+        |--------------------------------------------------------------------------
+        */
+
+            'workerHealth' => $metrics['worker_health'],
+
+            'workerEfficiency' => $metrics['worker_efficiency'],
+
+            'queueUtilization' => $metrics['queue_utilization'],
+
+            'recommendation' => $metrics['recommendation'],
+
+            'recommendationType' => $metrics['recommendation_type'],
+
+            'recommendationReason' => $metrics['recommendation_reason'],
+
         ]);
     }
 
@@ -111,13 +136,31 @@ class ScalingController extends Controller
      */
     public function metrics()
     {
+        $metrics = $this->scalingService->getCurrentMetrics();
+
         return response()->json([
 
             'status' => true,
 
-            'metrics' => $this->scalingService->getCurrentMetrics(),
+            'metrics' => $metrics,
 
             'statistics' => $this->scalingService->getStatistics(),
+
+            'health' => $metrics['worker_health'],
+
+            'efficiency' => $metrics['worker_efficiency'],
+
+            'queue_utilization' => $metrics['queue_utilization'],
+
+            'recommendation' => [
+
+                'title' => $metrics['recommendation'],
+
+                'type' => $metrics['recommendation_type'],
+
+                'reason' => $metrics['recommendation_reason'],
+
+            ],
 
             'generated_at' => now()->toDateTimeString(),
 

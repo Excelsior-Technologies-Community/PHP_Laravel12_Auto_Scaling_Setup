@@ -12,21 +12,83 @@ class ScalingService
     private int $minWorkers = 1;
     private int $scaleUpThreshold = 70;
     private int $scaleDownThreshold = 30;
-    private int $cooldownPeriod = 60;
+    private int $cooldownPeriod = 5;
 
     /**
      * Current Dashboard Metrics
      */
+
     public function getCurrentMetrics(): array
     {
+        $workers = Cache::get('active_workers', 1);
+
+        $load = Cache::get('current_load', 0);
+
+        $queue = $this->getQueueSize();
+
+        $memory = round(memory_get_usage(true) / 1024 / 1024, 2);
+
+        $health = $this->getWorkerHealth(
+            $load,
+            $queue,
+            $memory
+        );
+
+        $efficiency = $this->getWorkerEfficiency(
+            $workers,
+            $load
+        );
+
+        $utilization = $this->getQueueUtilization(
+            $queue
+        );
+
+        $recommendation = $this->getRecommendation(
+            $load,
+            $queue,
+            $workers
+        );
+
         return [
-            'workers' => Cache::get('active_workers', 1),
-            'load' => Cache::get('current_load', 0),
+
+            'workers' => $workers,
+
+            'load' => $load,
+
             'requests_per_minute' => $this->calculateRequestsPerMinute(),
-            'average_response_time' => Cache::get('avg_response_time', rand(40, 250)),
-            'memory_usage' => round(memory_get_usage(true) / 1024 / 1024, 2),
-            'last_scaled' => Cache::get('last_scaled_at', 'Never'),
-            'queue_size' => $this->getQueueSize(),
+
+            'average_response_time' => Cache::get(
+                'avg_response_time',
+                rand(40, 250)
+            ),
+
+            'memory_usage' => $memory,
+
+            'last_scaled' => Cache::get(
+                'last_scaled_at',
+                'Never'
+            ),
+
+            'queue_size' => $queue,
+
+            /*
+        |--------------------------------------------------------------------------
+        | New Metrics
+        |--------------------------------------------------------------------------
+        */
+
+            'worker_health' => $health,
+
+            'worker_efficiency' => $efficiency,
+
+            'queue_utilization' => $utilization,
+
+            'recommendation' => $recommendation['title'],
+
+            'recommendation_type' => $recommendation['type'],
+
+            'recommendation_reason' => $recommendation['reason'],
+
         ];
     }
 
@@ -96,15 +158,16 @@ class ScalingService
                 time(),
                 now()->addHours(1)
             );
-
-            $this->logScalingAction(
-                $currentWorkers,
-                $newWorkers,
-                $load,
-                $action,
-                $reason
-            );
         }
+
+        // Log every simulation
+        $this->logScalingAction(
+            $currentWorkers,
+            $newWorkers,
+            $load,
+            $action,
+            $reason
+        );
     }
 
     /**
@@ -166,15 +229,44 @@ class ScalingService
 
         Cache::put('request_log', $requests, now()->addHour());
 
-        Cache::put('avg_response_time', rand(30, 250), now()->addHour());
+        $response = match (true) {
+
+            $load >= 90 => rand(250, 450),
+
+            $load >= 70 => rand(150, 250),
+
+            $load >= 40 => rand(80, 150),
+
+            default => rand(20, 80),
+        };
+
+        Cache::put(
+            'avg_response_time',
+            $response,
+            now()->addHour()
+        );
     }
 
     /**
-     * Queue Size (Demo)
+     * Simulated Queue Size
      */
     private function getQueueSize(): int
     {
-        return rand(0, 100);
+        $load = Cache::get('current_load', 0);
+
+        if ($load >= 90) {
+            return rand(80, 100);
+        }
+
+        if ($load >= 70) {
+            return rand(60, 85);
+        }
+
+        if ($load >= 40) {
+            return rand(25, 60);
+        }
+
+        return rand(0, 20);
     }
 
     /**
@@ -293,6 +385,113 @@ class ScalingService
             )
             ->orderBy('created_at', 'desc')
             ->get();
+    }
+
+    /**
+     * Worker Health Status
+     */
+    private function getWorkerHealth(
+        int $load,
+        int $queue,
+        float $memory
+    ): string {
+
+        if ($load >= 85 || $queue >= 90 || $memory >= 120) {
+            return 'Overloaded';
+        }
+
+        if ($load >= 60 || $queue >= 60 || $memory >= 80) {
+            return 'Busy';
+        }
+
+        return 'Healthy';
+    }
+
+    /**
+     * Worker Efficiency
+     */
+    private function getWorkerEfficiency(
+        int $workers,
+        int $load
+    ): int {
+
+        if ($workers <= 0) {
+            return 0;
+        }
+
+        return min(
+            100,
+            round($load / $workers)
+        );
+    }
+
+    /**
+     * Queue Utilization
+     */
+    private function getQueueUtilization(
+        int $queue
+    ): int {
+
+        return min(
+            100,
+            round(($queue / 100) * 100)
+        );
+    }
+
+    /**
+     * Scaling Recommendation
+     */
+    private function getRecommendation(
+        int $load,
+        int $queue,
+        int $workers
+    ): array {
+
+        if (
+            $load > $this->scaleUpThreshold ||
+            $queue > 80
+        ) {
+
+            return [
+
+                'title' => 'Scale Up Recommended',
+
+                'type' => 'up',
+
+                'reason' =>
+                "High load ({$load}%) or queue ({$queue}) detected."
+
+            ];
+        }
+
+        if (
+            $load < $this->scaleDownThreshold &&
+            $queue < 20 &&
+            $workers > $this->minWorkers
+        ) {
+
+            return [
+
+                'title' => 'Scale Down Recommended',
+
+                'type' => 'down',
+
+                'reason' =>
+                "Low load ({$load}%) and queue ({$queue})."
+
+            ];
+        }
+
+        return [
+
+            'title' => 'No Action Needed',
+
+            'type' => 'normal',
+
+            'reason' =>
+            'System is operating within configured thresholds.'
+
+        ];
     }
 
     /**
