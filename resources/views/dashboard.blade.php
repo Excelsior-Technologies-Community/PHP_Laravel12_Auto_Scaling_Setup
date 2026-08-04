@@ -159,9 +159,9 @@
 
                 </p>
 
-                <h2 class="text-4xl font-bold mt-3
-
-            {{ $metrics['load'] > 70 ? 'text-red-600' : ($metrics['load'] < 30 ? 'text-green-600' : 'text-blue-600') }}">
+                <h2 id="currentLoad"
+                    class="text-4xl font-bold mt-3
+                {{ $metrics['load'] > 70 ? 'text-red-600' : ($metrics['load'] < 30 ? 'text-green-600' : 'text-blue-600') }}">
 
                     {{ $metrics['load'] }}%
 
@@ -177,7 +177,8 @@
 
                 </p>
 
-                <h2 class="text-4xl font-bold text-indigo-600 mt-3">
+                <h2 id="activeWorkers"
+                    class="text-4xl font-bold text-indigo-600 mt-3">
 
                     {{ $metrics['workers'] }}
 
@@ -214,6 +215,110 @@
                     {{ number_format($metrics['memory_usage'],2) }} MB
 
                 </h2>
+
+            </div>
+
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- System Health Overview -->
+        <!-- ========================================================= -->
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+
+            <!-- Worker Health -->
+
+            <div class="bg-white rounded-xl shadow-lg p-6">
+
+                <p class="text-gray-500 text-sm">
+                    Worker Health
+                </p>
+
+                @php
+
+                $healthColor = match($workerHealth){
+
+                'Healthy' => 'text-green-600',
+
+                'Busy' => 'text-yellow-500',
+
+                'Overloaded' => 'text-red-600',
+
+                default => 'text-gray-700'
+
+                };
+
+                @endphp
+
+                <h2 id="workerHealth"
+                    class="text-3xl font-bold mt-3 {{ $healthColor }}">
+
+                    {{ $workerHealth }}
+
+                </h2>
+            </div>
+
+            <!-- Worker Efficiency -->
+
+            <div class="bg-white rounded-xl shadow-lg p-6">
+
+                <p class="text-gray-500 text-sm">
+
+                    Worker Efficiency
+
+                </p>
+
+                <h2 class="text-3xl font-bold text-blue-600 mt-3">
+
+                    <span id="workerEfficiency">
+
+                        {{ $workerEfficiency }}
+
+                    </span>%
+
+                </h2>
+
+                <div class="w-full bg-gray-200 rounded-full h-3 mt-4">
+
+                    <div
+                        class="bg-blue-600 h-3 rounded-full"
+                        style="width: {{ $workerEfficiency }}%">
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- Queue Utilization -->
+
+            <div class="bg-white rounded-xl shadow-lg p-6">
+
+                <p class="text-gray-500 text-sm">
+
+                    Queue Utilization
+
+                </p>
+
+                <h2 class="text-3xl font-bold text-purple-600 mt-3">
+
+                    <span id="queueUtilization">
+
+                        {{ $queueUtilization }}
+
+                    </span>%
+
+                </h2>
+
+                <div class="w-full bg-gray-200 rounded-full h-3 mt-4">
+
+                    <div
+                        class="bg-purple-600 h-3 rounded-full"
+                        style="width: {{ $queueUtilization }}%">
+
+                    </div>
+
+                </div>
 
             </div>
 
@@ -302,6 +407,79 @@
                     </button>
 
                 </form>
+
+            </div>
+
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- Smart Recommendation -->
+        <!-- ========================================================= -->
+
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+
+            <div class="flex items-center justify-between">
+
+                <div>
+
+                    <h2 class="text-2xl font-bold">
+
+                        Smart Scaling Recommendation
+
+                    </h2>
+
+                    <p class="text-gray-500 mt-2">
+
+                        Real-time recommendation generated using
+                        current system load, queue size and workers.
+
+                    </p>
+
+                </div>
+
+                @if($recommendationType=='up')
+
+                <span class="bg-red-100 text-red-700 px-4 py-2 rounded-full font-semibold">
+
+                    Scale Up
+
+                </span>
+
+                @elseif($recommendationType=='down')
+
+                <span class="bg-yellow-100 text-yellow-700 px-4 py-2 rounded-full font-semibold">
+
+                    Scale Down
+
+                </span>
+
+                @else
+
+                <span class="bg-green-100 text-green-700 px-4 py-2 rounded-full font-semibold">
+
+                    Healthy
+
+                </span>
+
+                @endif
+
+            </div>
+
+            <div class="mt-6">
+
+                <h3 id="recommendationTitle"
+                    class="text-xl font-bold">
+
+                    {{ $recommendation }}
+
+                </h3>
+
+                <p id="recommendationReason"
+                    class="text-gray-600 mt-3">
+
+                    {{ $recommendationReason }}
+
+                </p>    
 
             </div>
 
@@ -637,9 +815,113 @@
 
                 </div>
 
+                <div class="bg-white rounded-lg shadow p-5">
+
+                    <div class="text-4xl mb-3">
+
+                        ❤️
+
+                    </div>
+
+                    <h3 class="font-bold text-lg mb-2">
+
+                        Worker Health
+
+                    </h3>
+
+                    <p class="text-gray-600">
+
+                        Current Worker Status
+
+<strong id="workerHealth">
+    {{ $workerHealth }}
+</strong>
+
+                    </p>
+
+                </div>
+
             </div>
 
         </div>
+
+        <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-6 mt-10">
+
+            <h2 class="text-2xl font-bold text-indigo-700">
+
+                System Summary
+
+            </h2>
+
+            <div class="grid md:grid-cols-2 gap-6 mt-5">
+
+                <div>
+
+                    <p>
+
+                        Worker Health
+
+<strong id="workerHealthSummary">
+    {{ $workerHealth }}
+</strong>
+
+                    </p>
+
+                    <p>
+
+                        Efficiency
+
+<strong>
+    <span id="workerEfficiencySummary">
+        {{ $workerEfficiency }}
+    </span>%
+</strong>
+
+                    </p>
+
+                </div>
+
+                <div>
+
+                    <p>
+
+                        Queue Utilization
+
+<strong>
+    <span id="queueUtilizationSummary">
+        {{ $queueUtilization }}
+    </span>%
+</strong>
+
+                    </p>
+
+                    <p>
+
+                        Recommendation
+
+<strong id="recommendationSummary">
+    {{ $recommendation }}
+</strong>
+
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="text-right text-gray-500 text-sm mb-4">
+
+    Last Updated :
+
+    <span id="lastUpdated">
+
+        {{ now()->format('H:i:s') }}
+
+    </span>
+
+</div>
 
         <!-- Charts -->
 
@@ -679,28 +961,23 @@
         new Chart(loadCtx, {
             type: 'doughnut',
             data: {
-                datasets: [{
-                    data: [{
-                            {
-                                $metrics['load']
-                            }
-                        },
-                        {
-                            {
-                                100 - $metrics['load']
-                            }
-                        }
-                    ],
-                    backgroundColor: [
-                        @if($metrics['load'] > 70)
-                        '#ef4444',
-                        @elseif($metrics['load'] < 30)
-                        '#10b981',
-                        @else '#3b82f6',
-                        @endif '#e5e7eb'
-                    ],
-                    borderWidth: 0
-                }]
+datasets: [{
+    data: [
+        {{ $metrics['load'] }},
+        {{ 100 - $metrics['load'] }}
+    ],
+    backgroundColor: [
+        @if($metrics['load'] > 70)
+            '#ef4444',
+        @elseif($metrics['load'] < 30)
+            '#10b981',
+        @else
+            '#3b82f6',
+        @endif
+        '#e5e7eb'
+    ],
+    borderWidth: 0
+}]
             },
             options: {
                 responsive: true,
@@ -721,26 +998,17 @@
                 labels: [
                     'Workers',
                     'Queue',
-                    'Requests'
+                    'Requests',
+                    'Efficiency'
                 ],
                 datasets: [{
                     label: 'System Metrics',
-                    data: [{
-                            {
-                                $metrics['workers']
-                            }
-                        },
-                        {
-                            {
-                                $metrics['queue_size']
-                            }
-                        },
-                        {
-                            {
-                                $metrics['requests_per_minute']
-                            }
-                        }
-                    ]
+data: [
+    {{ $metrics['workers'] }},
+    {{ $metrics['queue_size'] }},
+    {{ $metrics['requests_per_minute'] }},
+    {{ $workerEfficiency }}
+]
                 }]
             },
             options: {
@@ -764,19 +1032,49 @@
         |--------------------------------------------------------------------------
         */
 
-        setInterval(function() {
+setInterval(() => {
 
-            fetch("{{ route('metrics.json') }}")
+    fetch("{{ route('metrics.json') }}")
+        .then(response => response.json())
+        .then(data => {
 
-                .then(response => response.json())
+            const metrics = data.metrics;
 
-                .then(data => {
+            document.getElementById('currentLoad').innerHTML =
+                metrics.load + "%";
 
-                    console.log("Live Metrics", data);
+            document.getElementById('activeWorkers').innerHTML =
+                metrics.workers;
 
-                });
+            const queueSize = document.getElementById('queueSize');
+            if (queueSize) {
+                queueSize.innerHTML = metrics.queue_size;
+            }
 
-        }, 10000);
+            document.getElementById('workerHealth').innerHTML =
+                metrics.worker_health;
+
+            document.getElementById('workerEfficiency').innerHTML =
+                metrics.worker_efficiency;
+
+            document.getElementById('queueUtilization').innerHTML =
+                metrics.queue_utilization;
+
+            document.getElementById('recommendationTitle').innerHTML =
+                metrics.recommendation;
+
+            document.getElementById('recommendationReason').innerHTML =
+                metrics.recommendation_reason;
+
+            document.getElementById('lastUpdated').innerHTML =
+                data.generated_at;
+
+            console.log("Dashboard Updated");
+
+        })
+        .catch(error => console.log(error));
+
+}, 10000);
     </script>
 
 </body>
