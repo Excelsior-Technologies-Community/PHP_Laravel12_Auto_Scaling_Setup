@@ -12,116 +12,292 @@ class ScalingService
     private int $minWorkers = 1;
     private int $scaleUpThreshold = 70;
     private int $scaleDownThreshold = 30;
-    private int $cooldownPeriod = 60; // seconds
+    private int $cooldownPeriod = 60;
 
+    /**
+     * Current Dashboard Metrics
+     */
     public function getCurrentMetrics(): array
     {
         return [
             'workers' => Cache::get('active_workers', 1),
             'load' => Cache::get('current_load', 0),
             'requests_per_minute' => $this->calculateRequestsPerMinute(),
-            'average_response_time' => Cache::get('avg_response_time', 0),
-            'memory_usage' => memory_get_usage(true) / 1024 / 1024, // MB
+            'average_response_time' => Cache::get('avg_response_time', rand(40, 250)),
+            'memory_usage' => round(memory_get_usage(true) / 1024 / 1024, 2),
             'last_scaled' => Cache::get('last_scaled_at', 'Never'),
             'queue_size' => $this->getQueueSize(),
         ];
     }
 
-    public function simulateLoad(int $load = null): void
+    /**
+     * Simulate Server Load
+     */
+    public function simulateLoad(?int $load = null): void
     {
-        $load = $load ?? rand(10, 100);
-        Cache::put('current_load', $load, 120);
-        
+        $load = $load ?? rand(5, 100);
+
+        Cache::put('current_load', $load, now()->addMinutes(10));
+
         $this->recordMetrics($load);
+
         $this->autoScale($load);
     }
 
+    /**
+     * Auto Scaling Logic
+     */
     private function autoScale(int $load): void
     {
         $currentWorkers = Cache::get('active_workers', 1);
+
         $lastScaleTime = Cache::get('last_scaled_at_timestamp', 0);
-        
-        // Cooldown check
-        if (time() - $lastScaleTime < $this->cooldownPeriod) {
+
+        if ((time() - $lastScaleTime) < $this->cooldownPeriod) {
             return;
         }
 
-        $action = 'maintain';
         $newWorkers = $currentWorkers;
-        $reason = 'Load within thresholds';
+        $action = 'maintain';
+        $reason = 'Load within threshold';
 
-        if ($load > $this->scaleUpThreshold && $currentWorkers < $this->maxWorkers) {
-            $newWorkers = $currentWorkers + 1;
+        if (
+            $load > $this->scaleUpThreshold &&
+            $currentWorkers < $this->maxWorkers
+        ) {
+            $newWorkers++;
+
             $action = 'scale_up';
-            $reason = "Load ({$load}%) exceeds threshold ({$this->scaleUpThreshold}%)";
-        } elseif ($load < $this->scaleDownThreshold && $currentWorkers > $this->minWorkers) {
-            $newWorkers = $currentWorkers - 1;
+
+            $reason = "Load {$load}% exceeded {$this->scaleUpThreshold}%";
+        } elseif (
+            $load < $this->scaleDownThreshold &&
+            $currentWorkers > $this->minWorkers
+        ) {
+            $newWorkers--;
+
             $action = 'scale_down';
-            $reason = "Load ({$load}%) below threshold ({$this->scaleDownThreshold}%)";
+
+            $reason = "Load {$load}% below {$this->scaleDownThreshold}%";
         }
 
-        if ($newWorkers !== $currentWorkers) {
-            Cache::put('active_workers', $newWorkers, 3600);
-            Cache::put('last_scaled_at', Carbon::now()->toDateTimeString(), 3600);
-            Cache::put('last_scaled_at_timestamp', time(), 3600);
-            
-            $this->logScalingAction($currentWorkers, $newWorkers, $load, $action, $reason);
-            
-            // Simulate worker adjustment delay
-            sleep(1);
+        if ($newWorkers != $currentWorkers) {
+
+            Cache::put('active_workers', $newWorkers, now()->addHours(1));
+
+            Cache::put(
+                'last_scaled_at',
+                now()->toDateTimeString(),
+                now()->addHours(1)
+            );
+
+            Cache::put(
+                'last_scaled_at_timestamp',
+                time(),
+                now()->addHours(1)
+            );
+
+            $this->logScalingAction(
+                $currentWorkers,
+                $newWorkers,
+                $load,
+                $action,
+                $reason
+            );
         }
     }
 
-    private function logScalingAction(int $current, int $new, int $load, string $action, string $reason): void
-    {
+    /**
+     * Store Scaling History
+     */
+    private function logScalingAction(
+        int $currentWorkers,
+        int $newWorkers,
+        int $load,
+        string $action,
+        string $reason
+    ): void {
+
         DB::table('scaling_logs')->insert([
-            'current_workers' => $current,
-            'new_workers' => $new,
+
+            'current_workers' => $currentWorkers,
+
+            'new_workers' => $newWorkers,
+
             'load_percentage' => $load,
+
             'action' => $action,
+
             'reason' => $reason,
+
             'created_at' => now(),
+
             'updated_at' => now(),
         ]);
     }
 
+    /**
+     * Requests Per Minute
+     */
     private function calculateRequestsPerMinute(): int
     {
         $requests = Cache::get('request_log', []);
-        $oneMinuteAgo = Carbon::now()->subMinute()->timestamp;
-        
-        return count(array_filter($requests, function($time) use ($oneMinuteAgo) {
-            return $time > $oneMinuteAgo;
+
+        $lastMinute = Carbon::now()->subMinute()->timestamp;
+
+        return count(array_filter($requests, function ($time) use ($lastMinute) {
+
+            return $time >= $lastMinute;
         }));
     }
 
+    /**
+     * Record Requests
+     */
     private function recordMetrics(int $load): void
     {
         $requests = Cache::get('request_log', []);
+
         $requests[] = time();
-        
-        // Keep only last 1000 requests
+
         if (count($requests) > 1000) {
             $requests = array_slice($requests, -1000);
         }
-        
-        Cache::put('request_log', $requests, 3600);
+
+        Cache::put('request_log', $requests, now()->addHour());
+
+        Cache::put('avg_response_time', rand(30, 250), now()->addHour());
     }
 
+    /**
+     * Queue Size (Demo)
+     */
     private function getQueueSize(): int
     {
-        return rand(0, 100); // Simulated queue size
+        return rand(0, 100);
     }
 
-    public function getScalingHistory(int $limit = 10): array
+    /**
+     * Get Scaling History with Search, Filter & Pagination
+     */
+    public function getScalingHistory(
+        string $search = '',
+        string $action = '',
+        string $date = '',
+        int $perPage = 5
+    ) {
+        $query = DB::table('scaling_logs');
+
+        // Search
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('reason', 'like', "%{$search}%")
+                    ->orWhere('load_percentage', 'like', "%{$search}%")
+                    ->orWhere('current_workers', 'like', "%{$search}%")
+                    ->orWhere('new_workers', 'like', "%{$search}%");
+            });
+        }
+
+        // Filter by action
+        if (!empty($action)) {
+            $query->where('action', $action);
+        }
+
+        // Filter by date
+        if (!empty($date)) {
+            $query->whereDate('created_at', $date);
+        }
+
+        return $query
+            ->orderByDesc('created_at')
+            ->paginate($perPage);
+    }
+
+    /**
+     * Dashboard Statistics
+     */
+    public function getStatistics(): array
+    {
+        return [
+
+            'total_logs' => DB::table('scaling_logs')->count(),
+
+            'scale_up' => DB::table('scaling_logs')
+                ->where('action', 'scale_up')
+                ->count(),
+
+            'scale_down' => DB::table('scaling_logs')
+                ->where('action', 'scale_down')
+                ->count(),
+
+            'maintain' => DB::table('scaling_logs')
+                ->where('action', 'maintain')
+                ->count(),
+
+            'average_load' => round(
+                DB::table('scaling_logs')
+                    ->avg('load_percentage'),
+                2
+            ),
+
+            'max_load' => DB::table('scaling_logs')
+                ->max('load_percentage'),
+
+            'min_load' => DB::table('scaling_logs')
+                ->min('load_percentage'),
+
+            'latest_action' => DB::table('scaling_logs')
+                ->latest()
+                ->value('action'),
+
+            'latest_scaled_at' => DB::table('scaling_logs')
+                ->latest()
+                ->value('created_at'),
+        ];
+    }
+
+    /**
+     * Delete Single History Record
+     */
+    public function deleteHistory(int $id): bool
     {
         return DB::table('scaling_logs')
-            ->orderBy('created_at', 'desc')
-            ->limit($limit)
-            ->get()
-            ->toArray();
+            ->where('id', $id)
+            ->delete();
     }
 
+    /**
+     * Delete All History
+     */
+    public function deleteAllHistory(): bool
+    {
+        DB::table('scaling_logs')->truncate();
+
+        return true;
+    }
+
+    /**
+     * Get Export Data
+     */
+    public function getExportData()
+    {
+        return DB::table('scaling_logs')
+            ->select(
+                'id',
+                'current_workers',
+                'new_workers',
+                'load_percentage',
+                'action',
+                'reason',
+                'created_at'
+            )
+            ->orderBy('created_at', 'desc')
+            ->get();
+    }
+
+    /**
+     * Reset Auto Scaling Demo
+     */
     public function reset(): void
     {
         Cache::forget('active_workers');
@@ -129,5 +305,6 @@ class ScalingService
         Cache::forget('request_log');
         Cache::forget('last_scaled_at');
         Cache::forget('last_scaled_at_timestamp');
+        Cache::forget('avg_response_time');
     }
 }
